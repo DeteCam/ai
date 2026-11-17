@@ -11,4 +11,4 @@
 
 두 모델 모두 **규칙·물리 기준선이 먼저 있고, 모델은 기준선을 이길 때만 넣는다**는 원칙을 따른다.
 
-돌판 수신기 때의 '곡선 판독' 스펙(002-curve-reader)은 패널로 바뀌면서 뺐다. 깃 기록에 있다.
+돌판 수신기 때의 '곡선 판독' 스펙(002-curve-reader)은 패널로 바뀌면서 뺐다. 지금은 [receiver-legacy](https://github.com/DeteCam/receiver-legacy) 에 옮겨 두었다.
