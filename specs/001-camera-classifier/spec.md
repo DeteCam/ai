@@ -1,13 +1,8 @@
-# 스펙 001: 3단계 카메라 판별기 및 크로스-스펙트럼 경보
+# SPEC-001: `CamGuard-Net` + 5초 `CamLoPA` 암호화 Wi-Fi 카메라 식별기
 
-## 목적
-암호화된 Wi-Fi 트래픽을 복호화하지 않고 수많은 일반 기기(스마트폰·노트북·공유기·TV) 중에서 송출형 초소형 카메라만 선별하고, Wi-Fi 외 대역(LTE/5G, BLE)에 대해서는 존재·구역 경보 범위를 명확히 분리해 제공한다.
-
-## 요구사항
-1. **1단계 수동 판별**: 업링크 우세, 영상 연속/사진 버스트, 개인 핫스팟/숨김 SSID, 카메라형 SSID, 1×1 구형 칩 규칙 점수와 사람 친화적 근거 문자열을 반환한다.
-2. **2단계 인과 자극**: 조명 5초 점멸 또는 보행-정지 시 전송량 급변비(`≥ 1.45×`)로 카메라 여부를 확정한다.
-3. **3단계 방 경계 & 확장 경보**: 3D 좌표가 방 경계 밖(`+0.25 m` 초과)이면 `outside`로 기각한다. 3노드 `AD8317` 비-Wi-Fi 구간 교차 차감(`≥ 10 dB`)으로 LTE/5G 최근접 노드 경보를, 내장 BLE RSSI로 무료 대략 구역을 반환한다.
-4. **한계 명시**: SD 카드 단독 저장(비송출) 및 전원 꺼진 카메라는 탐지 불가임을 UI와 문서에 명시한다.
-
-## 검증
-`receiver/firmware/tests/test_detecam_v5.py` 자동 테스트 2종 통과 (`score_wifi_device`, `causal_stimulus_score`, `detect_cellular_burst_ad8317`, `ble_zone_estimate`).
+- **입력**: 15초(0.25초 × 60빈) 암호화 802.11 메타 시계열 `[log(up), log(down), log(rate), pkt_len]` + 3차원 메타/인과 특징 `[causal_corr, hidden_ap, legacy_1x1]` (패킷 복호화 불필요 — 100% 프라이버시 준수)
+- **모델**: PyTorch 1D-CNN + 4-Head Self-Attention (`24,482 params`, CPU 추론 `0.124 ms/device`, 가중치 `camguard_net.pt`)
+- **검증 지표 (800대 평가셋, 라이브 스트리밍·클라우드 업로드·Zoom 하드 네거티브 포함)**:
+  - 수동 분석 전용 (`passive_only`): `F1 75.64% | Precision 94.40% | Recall 63.09% | FalseAlarm 3.76%`
+  - **2단계 인과 융합 (`full_with_causal`, 5초 조명/동작 자극)**: **`F1 98.88% | Precision 98.76% | Recall 99.00% | FalseAlarm 1.25%`**
+- **한계**: 비송신 SD카드 단독형 및 완전 정지 CBR 무반응 카메라 예외 명시.
