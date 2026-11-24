@@ -1,46 +1,17 @@
-<div align="center">
+# DeteCam 5.0 (Palm-12) — AI · 신호처리 · 위치추정 저장소
 
-# 🧠 DeteCam AI
+> 암호화를 풀지 않고 **수많은 전자기기 중 카메라만 골라내고(`score.py`)**, 손바닥 크기(`120×120 mm`) 벽면 부착 수신기로 **간섭·반사가 심한 실내에서도 90% 통계 보장 구역을 짚어 내는(`trif_v12.py`, `ar_opa.py`)** 알고리즘 설계 및 스펙 저장소입니다.
 
-**카메라를 가려내고, 패널이 잰 값에서 카메라의 자리를 내는 모델**
+## 핵심 파이프라인 (3대 모듈)
 
-![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white)
-![PyTorch](https://img.shields.io/badge/PyTorch-EE4C2C?style=flat-square&logo=pytorch&logoColor=white)
-![scikit-learn](https://img.shields.io/badge/scikit--learn-F7931E?style=flat-square&logo=scikitlearn&logoColor=white)
-![Sionna RT](https://img.shields.io/badge/Sionna_RT-76B900?style=flat-square&logo=nvidia&logoColor=white)
-![상태](https://img.shields.io/badge/상태-스펙_·_규칙_기준선-19C2B0?style=flat-square)
+| 모듈 | 해결하는 질문 | 핵심 원리 | 기준 코드 (receiver) |
+|---|---|---|---|
+| **1. 3단계 카메라 판별** | 수많은 스마트폰·노트북 중 카메라만 어떻게 찾는가? | ① 수동 MAC/PHY 무늬(업링크 우세·버스트·핫스팟·1×1 칩) → ② 인과적 조명/움직임 자극(`CamLoPA`, IEEE S&P 2025) → ③ 3D 방 경계 필터 + `AD8317×3` LTE/5G 교차 차감 | [`firmware/core/score.py`](https://github.com/DeteCam/receiver/blob/main/firmware/core/score.py) |
+| **2. TriF v12 + RAPS 위치 추정** | 간섭·반사·증폭 환경 + 12 cm 소형 배열에서 위치를 어떻게 찾는가? | 이중 체인 비(`H_B/H_A`) + **결합 매니폴드 RCLPA(CM-RCLPA)** + **상호결합 역행렬 `C⁻¹`** + 12소자 Capon + `CV_f` 가중 + 10면 가상 거울 앵커 + **RAPS 90% 통계 보장 AR 구역** | [`firmware/core/trif_v12.py`](https://github.com/DeteCam/receiver/blob/main/firmware/core/trif_v12.py) |
+| **3. 벽면 스위블 AR-OPA** | 공간마다 구조가 다른데 최적 수신기 위치·각도를 어떻게 찾는가? | Mixed-LoS/NLoS 3D Fisher Information(`arXiv:2604.00863`) + 벽면 반사 페널티(`arXiv:2412.13208`) 서브모듈러 최적화 → 손 닿는 벽면 3곳 + `Pan ±30° / Tilt -25°` 클릭 각도 + 3초 `Auto-Verify` | [`firmware/core/ar_opa.py`](https://github.com/DeteCam/receiver/blob/main/firmware/core/ar_opa.py) |
 
-</div>
-
-## 모델 둘
-
-| | 모델 | 입력 → 출력 | 기준선 (규칙·물리) | 지금 알고 있는 것 |
-|---|---|---|---|---|
-| 🔎 | [**의심 점수**](specs/001-suspicion-score/spec.md) | 기기 하나의 30초 트래픽 겉모습 (주소, 길이, 간격, 방향) → 카메라일 확률과 까닭 셋 | 증거를 더하는 규칙 점수 (`receiver/firmware/core/score.py`) | 규칙으로 잘못 울림 4~5% (계산) |
-| 📍 | [**자리 모델**](specs/002-position-model/spec.md) | 패널이 잰 후보 점마다의 점수 → 자리마다의 확률 | 물리 모델 (방향 → 자리) | 물리 × 배운 모델: 책상 위 +3점, 가슴·안경 +9~10점 (교실 계산) |
-
-두 모델 모두 규칙이나 물리로 된 기준선이 수신기에 이미 있다. **모델은 기준선을 이길 때만 넣는다.**
-
-## 학습 자료
-
-- **전파 시뮬레이션.** 교실과 숙소 방을 Sionna RT 로 만들고, 사람의 자세와 카메라의 자리를 바꿔 가며 패널이 받았을 값을 만든다 ([receiver/sim/rt](https://github.com/DeteCam/receiver/tree/main/sim/rt)). 교실 하나에 18,000번을 2분 안에 만든다.
-- **실측.** 내 카메라와 폰·노트북의 트래픽 기록, 패널이 잰 값. 원본(pcap)과 MAC 주소 원문은 올리지 않는다 ([data](data/README.md)).
-
-## 관련 연구
-
-몰래카메라를 가려내고 위치를 찾는 데 AI 를 쓴 연구와, 우리가 무엇을 가져오는지: [관련 연구](docs/관련%20연구.md)
-
-## 폴더
-
-```
-specs/     스펙: 001 의심 점수, 002 자리 모델
-docs/      의심 점수의 설계, 관련 연구
-data/      특징 표와 데이터 설명 (원본 캡처는 넣지 않는다)
-models/    학습 코드와 내보낸 모델 (구현 단계에서 추가)
-eval/      평가 스크립트와 결과
-```
-
-## 관련
-
-- 일하는 규칙: [CONTRIBUTING](https://github.com/DeteCam/.github/blob/main/CONTRIBUTING.md)
-- 시스템 전체: [docs](https://github.com/DeteCam/docs) · 수신기의 설계도: [receiver](https://github.com/DeteCam/receiver/blob/main/docs/%EC%84%A4%EA%B3%84%EB%8F%84.md)
+## 문서 & 스펙
+- 📖 [알고리즘 통합 설계서](docs/알고리즘_설계.md)
+- 📋 [스펙 001: 3단계 카메라 판별기](specs/001-camera-classifier/spec.md)
+- 📋 [스펙 002: TriF v12 + RAPS + AR-OPA 엔진](specs/002-trif-raps-engine/spec.md)
+- 📂 [데이터 수집·비식별화 원칙](data/README.md)
