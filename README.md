@@ -1,22 +1,33 @@
 # DeteCam ai — 카메라 판별과 방향 · 위치 추정
 
-수신기가 모은 신호로 ① 여러 전자기기 가운데 2.4 · 5 GHz Wi-Fi 카메라를 골라내고 ② 카메라 방향과 의심 구역을 계산하는 소프트웨어 · AI입니다.
+수신기가 모은 신호로 ① 여러 전자기기 가운데 2.4 · 5 GHz Wi-Fi 카메라를 골라내고 ② 여러 자리에서 잰 결과를 합쳐 카메라 방향 · 위치와 의심 구역을 계산하는 소프트웨어 · AI입니다.
 
-> 상태(2026-11-25): **V0/V1 사전 검증 완료 · AX210 실측 전.** 이전(v6)의 "F1 98.88%", "1 m 이내 96.4%"는 규칙으로 만든 데이터와 같은 모델로 문제를 내고 푼 시뮬레이션 값이라 쓰지 않습니다. 작업 기준은 [docs/AGENTS.md](https://github.com/DeteCam/docs/blob/main/AGENTS.md)입니다.
+> 상태(2026-11-26): **문서 조사와 시뮬레이션 단계 · 실측 전.** 아래 방향 · 위치 숫자는 모두 시뮬레이션 계산값입니다. 이전(v6)의 "F1 98.88%", "1 m 이내 96.4%"는 규칙으로 만든 데이터와 같은 모델로 문제를 내고 푼 값이라 쓰지 않습니다. 작업 기준은 [docs/AGENTS.md](https://github.com/DeteCam/docs/blob/main/AGENTS.md), 지금 고른 설계는 [docs/현재_방향.md](https://github.com/DeteCam/docs/blob/main/현재_방향.md)입니다.
 
 ## 맡는 일
 
-| 단계 | 내용 | 스펙 · 사전 검증 |
+| 단계 | 내용 | 스펙 · 근거 |
 |---|---|---|
-| S1 카메라 판별 | **수동 802.11 L2/PHY 다중 시간축 분류기** (SoftAP 방향 무관 비대칭성 · 프레임 버스트 · 100 ms FFT GOP · PHY 능력 핑거프린트; 자극은 비시험장 선택 보조) | [`001-camera-classifier`](specs/001-camera-classifier/spec.md) · [`eval/PUBLIC_LODO_RESULTS_20261125.md`](eval/PUBLIC_LODO_RESULTS_20261125.md) |
-| S2~S6 방향 · 구역 | AX210 부호 앵커 복원, **비게이팅 복소 비율 시간 평균**, 중심 기준 안테나 9소자 통합, NEC2 1회 보정표, 벽 + 대형 금속 반사체(칠판 · 거울) 지도 반영 강건 방향 추정, 현장 보정, 2위치 비동기 신뢰도 가중 의심 구역 | [`002-map-aware-direction`](specs/002-map-aware-direction/spec.md) · [`receiver/sim/v1_ring/RESULTS_20261125.md`](https://github.com/DeteCam/receiver/blob/main/sim/v1_ring/RESULTS_20261125.md) |
+| S1 카메라 판별 | 패킷 내용을 풀지 않고 802.11 프레임의 시각 · 길이 · 방향 · 무선 능력 정보만으로 카메라를 고른다 | [`001-camera-classifier`](specs/001-camera-classifier/spec.md) · [`eval/PUBLIC_LODO_RESULTS_20261125.md`](eval/PUBLIC_LODO_RESULTS_20261125.md) |
+| S2 위상 기준 맞추기 | 두 수신 단자의 비율로 패킷마다 달라지는 위상 오차를 지우고, 앵커로 부호를 되찾고, 어느 행이 기준 체인인지 가른다 | [`002-map-aware-direction`](specs/002-map-aware-direction/spec.md) |
+| S3 간섭 보정 | 16소자 고리 + 기준 안테나의 보정표를 한 번 만들어 적용한다 | 같은 스펙 |
+| S4 지도 반영 추정 | 자리마다 방 지도(벽 · 천장 · 바닥 반사)를 넣은 우도 지도를 만들고 여러 자리의 지도를 합친다. 방향은 합친 위치를 가장 믿을 만한 자리에서 본 "융합 방향"으로 낸다 | 같은 스펙 |
+| S5 현장 보정 | 위치를 아는 송신기로 수신기가 놓인 각도를 맞춘다 | 같은 스펙 |
+| S6 신뢰도 · 의심 구역 | 지도 퍼짐으로 믿기 어려운 측정을 가려내고 AR에 띄울 구역 크기를 정한다 | 같은 스펙 |
+| S9 측정 안내 | 합친 지도가 아직 퍼져 있으면 자리를 더 재라고 안내한다 | 같은 스펙 |
 
-## 코드 구조
+방 지도 얻기(S7)와 AR 표시(S8)는 [app](https://github.com/DeteCam/app) 저장소가 맡습니다.
 
-- `model/passive_l2.py`: L2 메타데이터 전용 25종 특징 추출기 및 규칙 · 로지스틱 · 얕은 GBDT · 소형 MLP 분류기
-- `eval/public_lodo_baseline.py`: 공개 실측 PCAP(UNSW IoT Traces · Deakin IoT) 기기 분리(LODO) 및 교차 데이터셋 기준선 평가
+## 코드
+
+- `model/passive_l2.py`: 프레임 메타 정보에서 뽑는 25개 특징과 규칙 · 로지스틱 회귀 · 얕은 경사 부스팅 · 작은 신경망 분류기
+- `eval/public_lodo_baseline.py`: 공개 실측 캡처(UNSW IoT Traces · Deakin IoT)로 기기 단위로 나눠 평가하는 기준선
+- 방향 · 위치 추정기와 측정 뒤 절차(신뢰도, 융합 방향, 더 재기)는 지금 시뮬레이션 코드로만 있습니다: [receiver/sim](https://github.com/DeteCam/receiver/blob/main/sim/README.md). 실측 데이터가 생기면 이 저장소로 옮깁니다.
 - 설계 설명: [`docs/알고리즘_설계.md`](docs/알고리즘_설계.md) · 데이터 규칙: [`data/README.md`](data/README.md)
 
-## 목표 (docs AGENTS.md G1 · G2)
-- 카메라 판별: 실제 기기(AX210 2.4 · 5 GHz 각 별도) 기준 재현율 95% 이상, 오탐률 5% 이하
-- 방향: 같은 방(40명 교실 · 금속 칠판 등)에서 DiffLoc 재현 장비보다 평균 방향 오차 3° 이상 감소 및 P95 감소
+## 목표 (docs AGENTS.md G1~G4)
+
+- 카메라 판별: 실제 기기(2.4 · 5 GHz 각각) 기준 재현율 95% 이상, 오탐률 5% 이하
+- 방향: 같은 방 · 같은 카메라 · 같은 날 DiffLoc 재현 장비보다 평균 방향 오차가 3° 이상 작고 95% 지점도 작다
+- 위치: 시험실 밖은 공간 종류마다 카메라의 80% 이상을 0.5 m 안에 찾는다. 시험실은 진짜 책상이 의심 책상 3곳 안에 80% 이상
+- 의심 구역: 실제 카메라를 포함하는 비율 90% 이상(구역 크기와 함께 보고)
